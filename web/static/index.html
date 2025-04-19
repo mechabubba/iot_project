@@ -1,0 +1,146 @@
+<html>
+<head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=Jost:ital,wght@0,100..900;1,100..900&family=Sora:wght@100..800&display=swap" rel="stylesheet">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2113">
+ <style>
+    .sora-<uniquifier> {
+      font-family: "Sora", sans-serif;
+      font-optical-sizing: auto;
+      font-weight: <weight>;
+      font-style: normal;
+    }
+
+    body {
+      font-family: sans-serif;
+      background-color: #FDFDFD;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    h1 {
+      font-family: sora;
+      margin: 10px;
+      text-align: left;
+    }
+    
+    h3, h4 {
+      margin: 10px;
+      text-align: left;
+    }
+
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    #map-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 30px;
+      background-color: #2C62A3; 
+      border: 2px solid #ccc;
+      border-radius: 10px;
+    }
+canvas {
+      display: block;
+      background-color: #E3EAF3; 
+
+    }
+    
+  </style>
+</head>
+<body>
+  <h1>Indoor Cat Tracker</h1>
+<form id="config-form">
+  <h3>Set Room & Beacon Layout</h3>
+  <label>Room Width: <input type="number" id="room-width" value="10" /></label><br />
+  <label>Room Height: <input type="number" id="room-height" value="10" /></label><br />
+  <h4>Beacon Positions</h4>
+  <div id="beacons-input">
+    <label>Beacon 1: X <input type="number" id="b1x" value="0" /> Y <input type="number" id="b1y" value="0" /></label><br />
+    <label>Beacon 2: X <input type="number" id="b2x" value="10" /> Y <input type="number" id="b2y" value="0" /></label><br />
+    <label>Beacon 3: X <input type="number" id="b3x" value="0" /> Y <input type="number" id="b3y" value="10" /></label><br />
+    <label>Beacon 4: X <input type="number" id="b4x" value="10" /> Y <input type="number" id="b4y" value="10" /></label><br />
+  </div>
+  <button type="submit">Update Map</button>
+</form>
+<div id="map-wrapper">
+  <canvas id="map" width="800" height="800"></canvas>
+</div>
+
+  <script>
+
+document.getElementById('config-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const room = {
+    width: parseInt(document.getElementById('room-width').value),
+    height: parseInt(document.getElementById('room-height').value)
+  };
+
+  const beacons = [
+    { id: "beacon-1", x: parseFloat(document.getElementById('b1x').value), y: parseFloat(document.getElementById('b1y').value) },
+    { id: "beacon-2", x: parseFloat(document.getElementById('b2x').value), y: parseFloat(document.getElementById('b2y').value) },
+    { id: "beacon-3", x: parseFloat(document.getElementById('b3x').value), y: parseFloat(document.getElementById('b3y').value) },
+    { id: "beacon-4", x: parseFloat(document.getElementById('b4x').value), y: parseFloat(document.getElementById('b4y').value) }
+  ];
+
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ room, beacons })
+  });
+
+  fetchData(); // re-fetch and redraw canvas
+});
+
+
+    const canvas = document.getElementById('map');
+    const ctx = canvas.getContext('2d');
+    const scale = 80;
+
+    function drawPoint(x, y, color, label) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x * scale, y * scale, 8, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.fillStyle = "#000";
+      ctx.fillText(label, x * scale + 10, y * scale - 10);
+    }
+
+    async function fetchData() {
+      try {
+        const beaconRes = await fetch('/api/beacon');
+        const beacons = await beaconRes.json();
+
+        const receiverRes = await fetch('/api/receiver');
+        const receivers = await receiverRes.json();
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        beacons.forEach(b => drawPoint(b.x, b.y, "blue", b.id));
+
+        const latest = receivers.at(-1);
+        if (latest) {
+          drawPoint(latest.x, latest.y, "orange", "Cat");
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+      }
+    }
+
+    fetchData();
+    setInterval(fetchData, 2000);
+  </script>
+</body>
+</html>
