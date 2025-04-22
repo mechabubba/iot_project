@@ -11,6 +11,7 @@ from flask_login import (
 )
 from db_init import get_db_connection, initialize_database
 ##########################################
+import json
 
 app = Flask(__name__)
 
