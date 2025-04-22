@@ -1,7 +1,28 @@
-from flask import Flask, request, jsonify, send_from_directory
+#from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, render_template, flash
 from datetime import datetime
+# Added the following imports
+import sqlite3, json
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import (
+    LoginManager, UserMixin,
+    login_user, login_required,
+    logout_user, current_user, logout_user
+)
+from db_init import get_db_connection, initialize_database
+##########################################
 
 app = Flask(__name__)
+
+# — Session & Login config —
+app.secret_key = 'ReallyLongPassword69'
+
+login_manager = LoginManager()
+login_manager.login_view = 'login'
+login_manager.init_app(app)
+
+# Initialize your new Users table on startup
+initialize_database()
 
 receiver_data = []
 beacon_data = [
@@ -10,7 +31,69 @@ beacon_data = [
     {"id": "beacon-3", "x": 0, "y": 5}
 ]
 
+#Added the following class, definition and auth routes:
+class User(UserMixin):
+    def __init__(self, id, email, password_hash):
+        self.id = id
+        self.email = email
+        self.password_hash = password_hash
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = get_db_connection()
+    row = conn.execute("SELECT * FROM Users WHERE id = ?", (user_id,)).fetchone()
+    conn.close()
+    if row:
+        return User(row['id'], row['email'], row['password_hash'])
+    return None
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form['email']
+        pw_hash = generate_password_hash(request.form['password'])
+        conn = get_db_connection()
+        try:
+            conn.execute(
+              "INSERT INTO Users (email, password_hash) VALUES (?, ?)",
+              (email, pw_hash)
+            )
+            conn.commit()
+            flash("Registration successful. Please log in.", 'success')
+            return redirect(url_for('login'))
+        except sqlite3.IntegrityError:
+            flash("That email’s already taken.", 'danger')
+        finally:
+            conn.close()
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form['email']
+        pw = request.form['password']
+        conn = get_db_connection()
+        row = conn.execute(
+          "SELECT * FROM Users WHERE email = ?", (email,)
+        ).fetchone()
+        conn.close()
+        if row and check_password_hash(row['password_hash'], pw):
+            user = User(row['id'], row['email'], row['password_hash'])
+            login_user(user)
+            return redirect(url_for('index'))
+        flash("Invalid credentials.", 'danger')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+##########################################
+
 @app.route('/api/receiver', methods=['POST'])
+@login_required #                                <- Added this line.
 def post_receiver_location():
     data = request.get_json()
     if not data or 'id' not in data or 'x' not in data or 'y' not in data:
@@ -21,19 +104,23 @@ def post_receiver_location():
     return jsonify({"status": "Location received", "data": data}), 200
 
 @app.route('/api/beacon', methods=['GET'])
+@login_required #                                <- Added this line.
 def get_beacons():
     return jsonify(beacon_data), 200
 
 @app.route('/api/receiver', methods=['GET'])
+@login_required #                                <- Added this line.
 def get_receivers():
     return jsonify(receiver_data), 200
 
 
 @app.route('/')
-def serve_index():
-    return send_from_directory('static', 'index.html')
+@login_required #                                <- Added this line.
+def index():
+    return send_from_directory('templates', 'index.html') #changed "static" to "templates".
 
 @app.route('/api/config', methods=['POST'])
+@login_required #                                <- Added this line.
 def update_config():
     global beacon_data
     data = request.get_json()
