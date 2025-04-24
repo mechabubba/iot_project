@@ -153,8 +153,16 @@ def heatmap_data():
 
     return jsonify([[row['X'], row['Y']] for row in rows])
 
-
-
+@app.route('/api/sessions')
+def get_sessions():
+    conn = get_db_connection()
+    rows = conn.execute('''
+        SELECT SessionID, StartTime, EndTime, Description, Width, Height
+        FROM Session
+        ORDER BY SessionID DESC
+    ''').fetchall()
+    conn.close()
+    return jsonify([dict(row) for row in rows])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)
