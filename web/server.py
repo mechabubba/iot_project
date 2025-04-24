@@ -4,6 +4,7 @@ from datetime import datetime
 # Added the following imports
 import sqlite3, json
 from werkzeug.security import generate_password_hash, check_password_hash
+
 from flask_login import (
     LoginManager, UserMixin,
     login_user, login_required,
@@ -129,6 +130,30 @@ def update_config():
     with open("config.json", "w") as f:
         json.dump(data, f, indent=2)
     return jsonify({"status": "updated"})
+
+@app.route('/api/heatmap')
+def heatmap_data():
+    session_id = request.args.get('sessionID')
+    start_time = request.args.get('startTime')
+    end_time = request.args.get('endTime')
+
+    if not session_id:
+        return jsonify({"error": "sessionID is required"}), 400
+
+    conn = get_db_connection()
+    query = 'SELECT X, Y FROM Position WHERE SessionID = ?'
+    params = [session_id]
+
+    if start_time and end_time:
+        query += ' AND Timestamp BETWEEN ? AND ?'
+        params += [start_time, end_time]
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    return jsonify([[row['X'], row['Y']] for row in rows])
+
+
 
 
 if __name__ == '__main__':
