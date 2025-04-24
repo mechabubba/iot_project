@@ -88,6 +88,7 @@ canvas {
 document.getElementById('config-form').addEventListener('submit', async (e) => {
   e.preventDefault();
 
+/*
   const room = {
     width: parseInt(document.getElementById('room-width').value),
     height: parseInt(document.getElementById('room-height').value)
@@ -107,7 +108,35 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
   });
 
   fetchData(); // re-fetch and redraw canvas
+  */
+
+  const roomWidth = parseFloat(document.getElementById('room-width').value);
+  const roomHeight = parseFloat(document.getElementById('room-height').value);
+
+  fetchHeatmapData();
+  setInterval(fetchHeatmapData, 2000);
+
 });
+
+function drawHeatPoint(x, y) {
+  ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+  ctx.beginPath();
+  ctx.arc(x * scale, y * scale, 10, 0, 2 * Math.PI);
+  ctx.fill();
+}
+
+async function fetchHeatmapData() {
+  if (!currentSessionID) return;
+
+  const res = await fetch(`/api/heatmap?sessionID=${currentSessionID}`);
+  const points = await res.json();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (const [x, y] of points) {
+    drawHeatPoint(x, y);
+  }
+}
 
 
     const canvas = document.getElementById('map');
