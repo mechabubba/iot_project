@@ -32,7 +32,9 @@ def create_session_table():
         SessionID INTEGER PRIMARY KEY AUTOINCREMENT,
         StartTime DATETIME NOT NULL,
         EndTime DATETIME,
-        Description TEXT
+        Description TEXT,
+        Width REAL NOT NULL,
+        Height REAL NOT NULL
         );""")
     conn.close()
 
