@@ -164,6 +164,27 @@ def get_sessions():
     conn.close()
     return jsonify([dict(row) for row in rows])
 
+@app.route('/api/start_session', methods=['POST'])
+def start_session():
+    data = request.get_json()
+    width = data.get("width")
+    height = data.get("height")
+    description = data.get("description", "Live session")
+
+    if width is None or height is None:
+        return jsonify({"error": "Width and Height required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.execute("""
+        INSERT INTO Session (StartTime, Description, Width, Height)
+        VALUES (?, ?, ?, ?)
+    """, (datetime.now(), description, width, height))
+    session_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    return jsonify({"sessionID": session_id})
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)
 
