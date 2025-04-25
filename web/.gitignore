@@ -1,2 +1,5 @@
 .venv/
 config.json
+__pycache__/
+cat_tracker.db
+
