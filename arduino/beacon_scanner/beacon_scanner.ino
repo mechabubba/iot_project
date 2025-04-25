@@ -1,11 +1,19 @@
-// ============================
-// 📦 Includes
-// ============================
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 #include <BLEBeacon.h>
 #include <EEPROM.h>
+
+// uncomment this to do approximation related things
+//#define APPROX
+
+#define EEPROM_SIZE 512
+#define EEPROM_ADDR 0
+#define RSSI_SAMPLES 5
+
+#define UART_SERVICE_UUID      "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
 // ============================
 // 🔧 Constants & Global Flags
@@ -13,21 +21,22 @@
 const char* beaconUUID = "78563412-7856-3412-7856-341278563412";
 
 const int buttonPin = 0; // Change to match your actual GPIO for the button
+const bool useCallbackScanning = false;  // Change to true to use onResult()
+
 bool calibrationMode = false;
 bool calibrationComplete = false;
 unsigned long calibrationStartTime = 0;
-bool useCallbackScanning = false;  // Change to true to use onResult()
-BLEScan* pScan;
-#define EEPROM_SIZE 512
-#define EEPROM_ADDR 0
-#define RSSI_SAMPLES 5
+
+BLEScan* pScan; // for device scanning
+BLECharacteristic *pTxCharacteristic; // tx characteristic results
+BLECharacteristic *pRxCharacteristic;
+bool deviceConnected = false; // set in class MyServerCallbacks
+
 int rssiSamples[RSSI_SAMPLES];
 int sampleIndex = 0;
 int rssiCount = 0;  // Add at top
 int smoothedRSSI = 0; 
 int txPower = -59;
-
-
 
 // ============================
 // 📐 Beacon Structs
@@ -63,7 +72,8 @@ typedef struct {
 BeaconInfo knownBeacons[MAX_BEACONS] = {
   {1, 0.0, 0.0},
   {2, 2.0, 0.0},
-  {3, 1.0, 2.0}
+  {3, 1.0, 2.0},
+  {4, 1.0, 0.0}
 };
 
 BeaconInfo knownBeaconsBackup[MAX_BEACONS];
@@ -96,18 +106,20 @@ void loadCoordinatesFromEEPROM() {
 // ============================
 // 📏 Utility Functions
 // ============================
-float estimateDistance(int rssi) {
-  float ratio = rssi * 1.0 / txPower;
-  if (ratio < 1.0) return pow(ratio, 10);
-  else return 0.89976 * pow(ratio, 7.7095) + 0.111;
-}
-
+#ifdef APPROX
 float averageDistance(){
   if (rssiCount == 0) return 0;
   int sum = 0;
   for (int i = 0; i < rssiCount; i++) sum += rssiSamples[i];
   float avgRSSI = (float)sum / rssiCount;
   return estimateDistance(avgRSSI);
+}
+#endif
+
+float estimateDistance(int rssi) {
+  float ratio = rssi * 1.0 / txPower;
+  if (ratio < 1.0) return pow(ratio, 10);
+  else return 0.89976 * pow(ratio, 7.7095) + 0.111;
 }
 
 bool getBeaconCoordinates(uint16_t major, float &x, float &y) {
@@ -125,13 +137,6 @@ uint16_t readUInt16BE(const uint8_t* data, int offset) {
   return ((uint16_t)data[offset] << 8) | data[offset + 1];
 }
 
-// ============================
-// 🔘 Button Input Handling
-// ============================
-void setupButton() {
-  pinMode(buttonPin, INPUT_PULLUP);
-}
-
 bool buttonPressed() {
   static bool lastState = HIGH;
   bool currentState = digitalRead(buttonPin);
@@ -144,16 +149,38 @@ bool buttonPressed() {
   return false;
 }
 
-// ============================
-// 📡 BLE Advertised Device Callback
-// ============================
+/**
+ * Callbacks for UART stuff
+ */
+class MyServerCallbacks : public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) {
+    deviceConnected = true;
+    Serial.println("[UARTCallbacks] device connected. :)");
+  }
+
+  void onDisconnect(BLEServer* pServer) {
+    deviceConnected = false;
+    Serial.println("[UARTCallbacks] Device disconnected. :(");
+  }
+};
+
+class UARTCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    String rxValue = pCharacteristic->getValue();
+    if (rxValue.length() > 0) {
+      Serial.print("Received: ");
+      Serial.println(rxValue.c_str());
+    }
+  }
+};
+
+// BLE Advertised Device Callback
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
     if (!advertisedDevice.haveManufacturerData()) return;
 
     String rawStr = advertisedDevice.getManufacturerData();
     const uint8_t* payload = (const uint8_t*)rawStr.c_str();
-
 
     if (rawStr.length() == 25 && payload[0] == 0x4C && payload[1] == 0x00 &&
         payload[2] == 0x02 && payload[3] == 0x15) {
@@ -184,17 +211,12 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
         lastRSSI = rssi;
         lastDistance = dist;
         lastSeen = millis();
-        Serial.println("✅ [Callback] Found our beacon!");
-        Serial.printf("UUID: %s\n", uuidStr);
-        Serial.printf("Major: %u, Minor: %u, RSSI: %d, Est. distance: %.2f m\n",
-                      major, minor, rssi, dist);
-        Serial.println("----------------------------");
+
+        Serial.printf("[0x%04x] RSSI: %d, Est. Distance: %.2f\n", major, rssi, dist);
       }
     }
   }
 };
-
-
 
 // ============================
 // 🎯 Calibration Mode Logic
@@ -218,6 +240,7 @@ void enterCalibrationMode() {
       return;
     }
 
+    // a slight 2s delay is introduced here with pScan
     BLEScanResults* results = pScan->start(2, false);
     for (int i = 0; i < results->getCount(); i++) {
       BLEAdvertisedDevice d = results->getDevice(i);
@@ -253,6 +276,7 @@ void enterCalibrationMode() {
       for (int i = 0; i < MAX_BEACONS; i++) {
         if (temp[i].seen) {
           switch (temp[i].major) {
+            // in order: 0deg, 90deg, 180deg, 270deg
             case 1: knownBeacons[i] = {1, -temp[i].distance, 0}; break;
             case 2: knownBeacons[i] = {2,  temp[i].distance, 0}; break;
             case 3: knownBeacons[i] = {3,  0, temp[i].distance}; break;
@@ -319,11 +343,7 @@ void scanForBeacons() {
           lastSeen = millis();
           found = true;
 
-          Serial.println("✅ Found our beacon!");
-          Serial.printf("UUID: %s\n", uuidStr);
-          Serial.printf("Major: %u, Minor: %u, RSSI: %d, Est. distance: %.2f m\n",
-                        major, minor, rssi, dist);
-          Serial.println("----------------------------");
+          Serial.printf("[0x%04x] RSSI: %d, Est. Distance: %.2f\n", major, rssi, dist);
         }
       }
     }
@@ -339,8 +359,33 @@ void scanForBeacons() {
 // 🧷 Arduino Setup & Loop
 // ============================
 void setup() {
-  setupButton();
   Serial.begin(115200);
+  pinMode(buttonPin, INPUT_PULLUP); // set button pin to be pull up
+
+  // Setup BLE server and UART service
+  BLEServer *pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(UART_SERVICE_UUID);
+
+  // Create TX characteristic (notify only)
+  pTxCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID_TX,
+    BLECharacteristic::PROPERTY_NOTIFY
+  );
+
+  // Create RX characteristic (write only)
+  pRxCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID_RX,
+    BLECharacteristic::PROPERTY_WRITE
+  );
+  pRxCharacteristic->setCallbacks(new UARTCallbacks());
+  pService->start();
+
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(UART_SERVICE_UUID);
+  pAdvertising->start();
+
   BLEDevice::init("Receiver");
   pScan = BLEDevice::getScan();
   pScan->setActiveScan(true);
@@ -350,6 +395,7 @@ void setup() {
   } else {
     Serial.println("🧠 Manual scanning enabled.");
   }
+
   loadCoordinatesFromEEPROM();
   Serial.println("🔍 Starting scan loop...");
 }
@@ -359,15 +405,17 @@ void loop() {
   if (!useCallbackScanning) scanForBeacons();  // Only call if not using onResult()
 
   if (millis() - lastSeen < 5000) {
-    Serial.printf("📡 Live Distance Estimate: %.2f m (RSSI: %d)\n", lastDistance, lastRSSI);
-    Serial.println();
+    Serial.printf("Live distance estimate: %.2fm (RSSI: %d)\n", lastDistance, lastRSSI);
+
+    #ifdef APPROX
     Serial.print("📡 Average Distance: ");
     Serial.print(averageDistance());
-    Serial.println(" (kinda wonky at times for unknown reasons)");
+    Serial.println(" (can be wonky)");
+    #endif 
 
     Serial.print("SmoothedRSSI Distance: ");
     Serial.print(estimateDistance(smoothedRSSI));
-    Serial.println(" (also kinda wonky at times for unknown reasons)");
+    Serial.println("m (can be wonky)\n");
   } else {
     Serial.println("⚠️  Beacon not seen recently...");
   }
