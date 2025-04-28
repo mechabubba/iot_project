@@ -363,7 +363,7 @@ void scanForBeacons() {
           Serial.printf("[0x%04x] RSSI: %d, Est. Distance: %.2fm\n", major, rssi, dist);
           if (deviceConnected) {
             char json[128];
-            snprintf(json, sizeof json, "{\"success\":true,\"data\":{\"id\":%d,\"rssi\":%d}}", major, rssi); // note: json does not support hex numbering
+            snprintf(json, sizeof json, "{\"success\":true,\"event\":\"transmission\",\"data\":{\"id\":%d,\"rssi\":%d}}", major, rssi); // note: json does not support hex numbering
             pTxCharacteristic->setValue(json);
             pTxCharacteristic->notify();
           }
@@ -457,6 +457,7 @@ void loop() {
 // baby non-standard json schema
 {
   "success": boolean,
+  "event": string, present if success is true
   "error": string, present if success is false
   "data": object {
     "message": string,
@@ -464,4 +465,3 @@ void loop() {
   }
 }
 */
-
