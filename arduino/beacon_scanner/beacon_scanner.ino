@@ -1,4 +1,6 @@
 #include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 #include <BLEBeacon.h>
@@ -83,7 +85,7 @@ int beaconCount = 0;
 int lastRSSI = 0;
 float lastDistance = 0.0;
 unsigned long lastSeen = 0;
-const uint16_t targetMajor = 1;
+const uint16_t targetMajor = 1; // this is unused?
 
 // ============================
 // 💾 EEPROM Save/Load
@@ -103,9 +105,9 @@ void loadCoordinatesFromEEPROM() {
   Serial.println("📥 Beacon coordinates loaded from EEPROM.");
 }
 
-// ============================
-// 📏 Utility Functions
-// ============================
+/**
+ * # Misc. utility functions
+ */
 #ifdef APPROX
 float averageDistance(){
   if (rssiCount == 0) return 0;
@@ -137,6 +139,8 @@ uint16_t readUInt16BE(const uint8_t* data, int offset) {
   return ((uint16_t)data[offset] << 8) | data[offset + 1];
 }
 
+// Small method for handling the button press
+// @TODO maybe make this an interrupt?
 bool buttonPressed() {
   static bool lastState = HIGH;
   bool currentState = digitalRead(buttonPin);
@@ -150,12 +154,16 @@ bool buttonPressed() {
 }
 
 /**
- * Callbacks for UART stuff
+ * # Callbacks for UART stuff
+ * - `MyServerCallbacks` handles server connection stuff
+ * - `UARTCallbacks` handles actual communication stuff, via the UART characteristic
  */
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
     deviceConnected = true;
-    Serial.println("[UARTCallbacks] device connected. :)");
+    Serial.println("[UARTCallbacks] Device connected. :)");
+    // pTxCharacteristic->setValue("Hello from ESP32!");
+    // pTxCharacteristic->notify();
   }
 
   void onDisconnect(BLEServer* pServer) {
@@ -174,7 +182,10 @@ class UARTCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
-// BLE Advertised Device Callback
+/**
+ * # BLE Advertised Device Callback
+ * This is the callback triggered when we initially reach out to a beacon - this is ran once.
+ */
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
     if (!advertisedDevice.haveManufacturerData()) return;
@@ -213,14 +224,20 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
         lastSeen = millis();
 
         Serial.printf("[0x%04x] RSSI: %d, Est. Distance: %.2f\n", major, rssi, dist);
+        if (deviceConnected) {
+          char json[128];
+          snprintf(json, sizeof json, "{'success':true,'data':{'id':0x%04x,'rssi':%d}}", major, rssi);
+          pTxCharacteristic->setValue(json);
+          pTxCharacteristic->notify();
+        }
       }
     }
   }
 };
 
-// ============================
-// 🎯 Calibration Mode Logic
-// ============================
+/**
+ * # Calibration Mode Logic
+ */
 void enterCalibrationMode() {
   calibrationMode = true;
   calibrationComplete = false;
@@ -296,9 +313,9 @@ void enterCalibrationMode() {
   }
 }
 
-// ============================
-// 🔎 Scanning Routine
-// ============================
+/**
+ * # Scanning routine
+ */
 void scanForBeacons() {
   BLEScanResults* results = pScan->start(1, false);
   int count = results->getCount();
@@ -343,7 +360,13 @@ void scanForBeacons() {
           lastSeen = millis();
           found = true;
 
-          Serial.printf("[0x%04x] RSSI: %d, Est. Distance: %.2f\n", major, rssi, dist);
+          Serial.printf("[0x%04x] RSSI: %d, Est. Distance: %.2fm\n", major, rssi, dist);
+          if (deviceConnected) {
+            char json[128];
+            snprintf(json, sizeof json, "{\"success\":true,\"data\":{\"id\":%d,\"rssi\":%d}}", major, rssi); // note: json does not support hex numbering
+            pTxCharacteristic->setValue(json);
+            pTxCharacteristic->notify();
+          }
         }
       }
     }
@@ -352,15 +375,14 @@ void scanForBeacons() {
   pScan->clearResults();
 }
 
-
-
-
-// ============================
-// 🧷 Arduino Setup & Loop
-// ============================
+/**
+ * Setup and loop stuff
+ */
 void setup() {
-  Serial.begin(115200);
   pinMode(buttonPin, INPUT_PULLUP); // set button pin to be pull up
+  Serial.begin(115200);
+
+  BLEDevice::init("Receiver");
 
   // Setup BLE server and UART service
   BLEServer *pServer = BLEDevice::createServer();
@@ -375,18 +397,22 @@ void setup() {
   );
 
   // Create RX characteristic (write only)
-  pRxCharacteristic = pService->createCharacteristic(
+  BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
     CHARACTERISTIC_UUID_RX,
     BLECharacteristic::PROPERTY_WRITE
   );
   pRxCharacteristic->setCallbacks(new UARTCallbacks());
+
   pService->start();
 
+  // Start advertising
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(UART_SERVICE_UUID);
   pAdvertising->start();
 
-  BLEDevice::init("Receiver");
+  Serial.println("📡 BLE UART Service is advertising...");
+
+  // BLE Scan setup
   pScan = BLEDevice::getScan();
   pScan->setActiveScan(true);
   if (useCallbackScanning) {
@@ -405,7 +431,7 @@ void loop() {
   if (!useCallbackScanning) scanForBeacons();  // Only call if not using onResult()
 
   if (millis() - lastSeen < 5000) {
-    Serial.printf("Live distance estimate: %.2fm (RSSI: %d)\n", lastDistance, lastRSSI);
+    //Serial.printf("Live distance estimate: %.2fm (RSSI: %d)\n", lastDistance, lastRSSI);
 
     #ifdef APPROX
     Serial.print("📡 Average Distance: ");
@@ -418,7 +444,24 @@ void loop() {
     Serial.println("m (can be wonky)\n");
   } else {
     Serial.println("⚠️  Beacon not seen recently...");
+    
+    if (deviceConnected) {
+      pTxCharacteristic->setValue("{\"success\":false,\"error\":\"no_beacon_seen\"}");
+      pTxCharacteristic->notify();
+    }
   }
   delay(100);
 }
+
+/*
+// baby non-standard json schema
+{
+  "success": boolean,
+  "error": string, present if success is false
+  "data": object {
+    "message": string,
+    ...other stuff, as needed (depends on message string)
+  }
+}
+*/
 

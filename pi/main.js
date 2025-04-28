@@ -2,8 +2,9 @@ const { createBluetooth } = require("node-ble");
 const fetch = require("node-fetch");
 
 // Replace with your Arduino's Bluetooth address
-const ARDUINO_BLUETOOTH_ADDR = '1B:91:AE:F6:85:53';
- 
+//const ARDUINO_BLUETOOTH_ADDR = '1B:91:AE:F6:85:53';
+const ARDUINO_BLUETOOTH_ADDR = '40:4C:CA:57:7F:7E';
+
 const UART_SERVICE_UUID = '6E400001-B5A3-F393-E0A9-E50E24DCCA9E';
 const TX_CHARACTERISTIC_UUID = '6E400002-B5A3-F393-E0A9-E50E24DCCA9E';
 const RX_CHARACTERISTIC_UUID = '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
@@ -16,8 +17,8 @@ async function main() {
     const { bluetooth, destroy } = createBluetooth();
     const adapter = await bluetooth.defaultAdapter();
     await adapter.startDiscovery();
+    
     console.log('discovering...');
- 
     const device = await adapter.waitDevice(ARDUINO_BLUETOOTH_ADDR.toUpperCase());
     console.log('found device. attempting connection...');
     await device.connect();
@@ -56,6 +57,7 @@ async function main() {
         }
 
         // idk do smth
+        console.log(json);
 
     });
 }
