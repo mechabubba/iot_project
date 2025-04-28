@@ -7,7 +7,7 @@
 // 👉 Globals
 uint16_t majorID = 0; // Global variable to hold parsed ID
 #define MINOR_ID 0
-
+#define LED_PIN 2
 BLEBeacon beacon;
 BLEAdvertisementData advData;
 
@@ -18,6 +18,9 @@ void setup() {
   delay(100);  // Ensure port is ready
   Serial.println("✅ Serial started!");
 
+  // set led to be on
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
 
   String majStr = getMajID();       // Only call ONCE
   Serial.println(majStr);
