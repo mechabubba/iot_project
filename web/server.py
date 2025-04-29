@@ -95,7 +95,7 @@ def logout():
 ##########################################
 
 @app.route('/api/receiver', methods=['POST'])
-@login_required #                                <- Added this line.
+@login_required
 def post_receiver_location():
     data = request.get_json()
     if not data or 'id' not in data or 'x' not in data or 'y' not in data:
@@ -106,23 +106,23 @@ def post_receiver_location():
     return jsonify({"status": "Location received", "data": data}), 200
 
 @app.route('/api/beacon', methods=['GET'])
-@login_required #                                <- Added this line.
+@login_required
 def get_beacons():
     return jsonify(beacon_data), 200
 
 @app.route('/api/receiver', methods=['GET'])
-@login_required #                                <- Added this line.
+@login_required
 def get_receivers():
     return jsonify(receiver_data), 200
 
 
 @app.route('/')
-@login_required #                                <- Added this line.
+@login_required
 def index():
     return send_from_directory('templates', 'index.html') #changed "static" to "templates".
 
 @app.route('/api/config', methods=['POST'])
-@login_required #                                <- Added this line.
+@login_required
 def update_config():
     global beacon_data
     data = request.get_json()
