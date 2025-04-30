@@ -1,0 +1,126 @@
+<head>
+  <meta charset="UTF-8">
+  <title>Past Sessions - Indoor Cat Tracker</title>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&family=Jost:ital,wght@0,100..900;1,100..900&family=Sora:wght@100..800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: "Jost", sans-serif;
+      background-color: #FDFDFD;
+      padding: 20px;
+      color: #333;
+    }
+
+    h1 {
+      font-family: "Sora", sans-serif;
+      font-size: 28px;
+      color: #2C62A3;
+    }
+
+    #session-list {
+      margin-top: 20px;
+    }
+
+    .session-item {
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background-color: #f5f5f5;
+    }
+
+    .session-item h3 {
+      margin: 0 0 5px;
+    }
+
+    
+    canvas {
+      display: block;
+      margin: 10px 0;
+      border: 1px solid #999;
+    }
+
+    input[type=range] {
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <a href="/" style="text-decoration: none;">
+    <button style="margin-bottom: 20px; background-color: #2C62A3; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer;">
+    Back to Current Session
+    </button>
+  </a>
+  <h1>Past Sessions</h1>
+  <div id="session-list"></div>
+
+<script>
+  async function fetchSessions() {
+    const res = await fetch('/api/sessions');
+    const sessions = await res.json();
+
+    const list = document.getElementById('session-list');
+    list.innerHTML = '';
+
+    for (const session of sessions) {
+      const div = document.createElement('div');
+      div.className = 'session-item';
+
+      div.innerHTML = `
+        <h3>Session ID: ${session.SessionID}</h3>
+        <p><strong>Start:</strong> ${session.StartTime}</p>
+        <p><strong>End:</strong> ${session.EndTime || 'Active'}</p>
+        <p><strong>Description:</strong> ${session.Description}</p>
+        <p><strong>Room Size:</strong> ${session.Width} x ${session.Height}</p>
+      `;
+
+      if (session.EndTime && session.EndTime !== 'Active') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 300;
+        canvas.height = 300;
+        canvas.id = `canvas-${session.SessionID}`;
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.id = `slider-${session.SessionID}`;
+        div.appendChild(canvas);
+        div.appendChild(slider);
+
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.src = `/drawings/drawing_session_${session.SessionID}.png`;
+        await new Promise(resolve => {
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0, 300, 300);
+            resolve();
+          };
+        });
+
+        const heatRes = await fetch(`/api/heatmap?sessionID=${session.SessionID}`);
+        const points = await heatRes.json();
+        slider.max = points.length - 1;
+        slider.value = 0;
+
+        slider.addEventListener('input', () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, 300, 300);
+          const [x, y] = points[slider.value];
+          ctx.fillStyle = "red";
+          ctx.beginPath();
+          ctx.arc(x * 30, y * 30, 5, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      } else {
+        const note = document.createElement('p');
+        note.textContent = 'No preview available for active session.';
+        note.style.color = 'gray';
+        div.appendChild(note);
+      }
+
+      list.appendChild(div);
+    }
+  }
+
+  fetchSessions();
+</script>
+
+</body>
+</html>
