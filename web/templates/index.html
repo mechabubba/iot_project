@@ -43,7 +43,9 @@
     }
 
     #map-wrapper {
-      display: flex;
+      width: 800px;
+      height: 800px;
+      position: relative;
       justify-content: center;
       align-items: center;
       padding: 30px;
@@ -51,15 +53,42 @@
       border: 2px solid #ccc;
       border-radius: 10px;
     }
-canvas {
-      display: block;
-      background-color: #E3EAF3; 
+    canvas {
+      position: absolute;
+    }
 
+   
+    #drawMap {
+      background-color: transparent;
+      z-index: 2;
+    }
+
+    #map {
+      background-color: #E3EAF3;
+      z-index: 1;
+    }
+
+    #draw-controls {
+      margin-top: 10px;
+    }
+
+    #draw-controls button {
+      margin: 0 10px;
+      padding: 8px 16px;
+      font-size: 16px;
+    }
+    #status {
+      margin: 10px;
+      font-weight: bold;
+      font-size: 18px;
+      color: #2C62A3;
     }
     
   </style>
 </head>
 <body>
+
+
   <div style="text-align: right; margin-bottom: 20px;">
     <a href="/logout">
       <button type="button">Logout</button>
@@ -78,21 +107,168 @@ canvas {
     <label>Beacon 4: X <input type="number" id="b4x" value="10" /> Y <input type="number" id="b4y" value="10" /></label><br />
   </div>
   <button type="submit">Update Map</button>
+
+  <button id="start-session" type="button">Start Session</button>
+  <a href="/sessions">
+    <button type="button">Past Sessions</button>
+  </a>
+  <button id="end-session" type="button">End Session</button>
+
 </form>
+
+<div id="status"></div>
+
 <div id="map-wrapper">
   <canvas id="map" width="800" height="800"></canvas>
+  <canvas id="drawMap" width="800" height="800"></canvas>
+</div>
+
+
+<div id="draw-controls" style="margin-top: 20px; text-align: center;">
+
+    <button id="start-draw">Start Drawing</button>
+    <button id="clear-draw">Clear Drawing</button>
+    <button id="save-draw">Save Room</button>
 </div>
 
   <script>
+    const startSessionBtn = document.getElementById('start-session');
+    const canvas = document.getElementById('map');
+    const canvasDraw = document.getElementById('drawMap');
+    const ctx = canvas.getContext('2d');
+    const ctxDraw = canvasDraw.getContext('2d');
+
+    const drawRoomBtn = document.getElementById('start-draw');
+    const clearDrawBtn = document.getElementById('clear-draw');
+    const saveDrawBtn = document.getElementById('save-draw');
+
+
+    const scale = 80;
+
+    let drawing = false;
+    let drawingMode = false;
+    let currentSessionID = null;
+
+    startSessionBtn.addEventListener('click', async () => {
+      const width = parseFloat(document.getElementById('room-width').value);
+      const height = parseFloat(document.getElementById('room-height').value);
+
+      const res = await fetch('/api/start_session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ width, height, description: 'Current Session' })
+      });
+
+      const data = await res.json();
+      currentSessionID = data.sessionID;
+      document.getElementById('status').textContent = `Started session: ${currentSessionID}`;
+    });
+   
+    drawRoomBtn.addEventListener('click', () => {
+      drawingMode = !drawingMode;
+      document.getElementById('drawMap').style.zIndex = "2";
+      document.getElementById('drawMap').style.backgroundColor = "transparent";
+      document.getElementById('map').style.zIndex = "1";
+      document.getElementById('map').style.backgroundColor = "#E3EAF3";
+
+      drawRoomBtn.textContent = drawingMode ? "Stop Drawing" : "Start Drawing";
+
+    });
+
+    clearDrawBtn.addEventListener('click', async () => {
+
+      ctxDraw.clearRect(0, 0, canvas.width, canvas.height);
+      await fetchData();
+    });
+    canvasDraw.addEventListener('mousedown', (e) => {
+      if (!drawingMode) return;
+      drawing = true;
+      ctxDraw.beginPath();
+      draw(e);
+    });
+
+    canvasDraw.addEventListener('mousemove', draw);
+
+    canvasDraw.addEventListener('mouseup', () => {
+      if (!drawingMode) return;
+      drawing = false;
+    });
+    canvasDraw.addEventListener('mouseleave', () => {
+      if (!drawingMode) return;
+      drawing = false;
+      ctxDraw.beginPath();
+    });
+
+
+
+
+    function draw(e) {
+      if (!drawing || !drawingMode) return;
+      ctxDraw.lineWidth = 5;
+      ctxDraw.lineCap = 'round';
+      ctxDraw.strokeStyle = 'black';
+
+      const rect = canvasDraw.getBoundingClientRect();
+      ctxDraw.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      ctxDraw.stroke();
+      ctxDraw.beginPath();
+      ctxDraw.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+  }
+
+
+    saveDrawBtn.addEventListener('click', async () => {
+
+      if (!currentSessionID) {
+        document.getElementById('status').textContent = 'Please start a session first!';
+        return;
+      }
+
+      document.getElementById('drawMap').style.zIndex = "0";
+      document.getElementById('map').style.backgroundColor = "transparent";
+      document.getElementById('drawMap').style.backgroundColor = "#E3EAF3";
+
+      drawRoomBtn.textContent = "Start Drawing";
+
+ 
+      const dataURL = canvasDraw.toDataURL('image/png');
+
+      await fetch('/api/save_room_drawing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sessionID: currentSessionID,
+          drawingData: dataURL
+        })
+      });
+
+      document.getElementById('status').textContent = 'Room saved successfully!';
+    });
+
+document.getElementById('end-session').addEventListener('click', async () => {
+  if (!currentSessionID) {
+    document.getElementById('status').textContent = "No active session to end.";
+    return;
+  }
+
+  const res = await fetch('/api/end_session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionID: currentSessionID })
+  });
+
+  const result = await res.json();
+  document.getElementById('status').textContent = result.status === "ended"
+    ? `Session ${currentSessionID} ended.`
+    : "Failed to end session.";
+});
+
 
 document.getElementById('config-form').addEventListener('submit', async (e) => {
   e.preventDefault();
 
-/*
-  const room = {
-    width: parseInt(document.getElementById('room-width').value),
-    height: parseInt(document.getElementById('room-height').value)
-  };
+
 
   const beacons = [
     { id: "beacon-1", x: parseFloat(document.getElementById('b1x').value), y: parseFloat(document.getElementById('b1y').value) },
@@ -101,20 +277,21 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
     { id: "beacon-4", x: parseFloat(document.getElementById('b4x').value), y: parseFloat(document.getElementById('b4y').value) }
   ];
 
+
+  const room = {
+    width: parseInt(document.getElementById('room-width').value),
+    height: parseInt(document.getElementById('room-height').value)
+  };
+
+
   await fetch('/api/config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ room, beacons })
   });
 
-  fetchData(); // re-fetch and redraw canvas
-  */
+  fetchData(); 
 
-  const roomWidth = parseFloat(document.getElementById('room-width').value);
-  const roomHeight = parseFloat(document.getElementById('room-height').value);
-
-  fetchHeatmapData();
-  setInterval(fetchHeatmapData, 2000);
 
 });
 
@@ -131,26 +308,44 @@ async function fetchHeatmapData() {
   const res = await fetch(`/api/heatmap?sessionID=${currentSessionID}`);
   const points = await res.json();
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   for (const [x, y] of points) {
     drawHeatPoint(x, y);
   }
 }
 
+     const beaconColors = {
+       "beacon-1": "red",
+       "beacon-2": "blue",
+       "beacon-3": "green",
+       "beacon-4": "yellow"
+     };
 
-    const canvas = document.getElementById('map');
-    const ctx = canvas.getContext('2d');
-    const scale = 80;
+function drawPoint(x, y, color, label) {
+  const margin = 6;
+  let px = x * scale;
+  let py = y * scale;
 
-    function drawPoint(x, y, color, label) {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(x * scale, y * scale, 8, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.fillStyle = "#000";
-      ctx.fillText(label, x * scale + 10, y * scale - 10);
-    }
+  px = Math.min(Math.max(px, margin), canvas.width - margin);
+  py = Math.min(Math.max(py, margin), canvas.height - margin);
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(px, py, 8, 0, 2 * Math.PI);
+  ctx.fill();
+
+  ctx.fillStyle = "#000";
+  ctx.font = "14px Jost";
+
+  // Adjust label offset to always stay within canvas
+  let labelX = px + 12;
+  let labelY = py - 12;
+
+  if (labelX > canvas.width - 50) labelX = px - 50;
+  if (labelY < 12) labelY = py + 20;
+
+  ctx.fillText(label, labelX, labelY);
+}
 
     async function fetchData() {
       try {
@@ -162,12 +357,17 @@ async function fetchHeatmapData() {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        beacons.forEach(b => drawPoint(b.x, b.y, "blue", b.id));
+        beacons.forEach(b => {
+        const color = beaconColors[b.id] || "blue";
+        drawPoint(b.x, b.y, color, b.id);
+        });
 
         const latest = receivers.at(-1);
         if (latest) {
           drawPoint(latest.x, latest.y, "orange", "Cat");
         }
+        await fetchHeatmapData();
+
       } catch (err) {
         console.error("Fetch error:", err);
       }
@@ -175,6 +375,8 @@ async function fetchHeatmapData() {
 
     fetchData();
     setInterval(fetchData, 2000);
+
+
   </script>
 </body>
 </html>
