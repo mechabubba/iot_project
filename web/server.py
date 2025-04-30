@@ -103,7 +103,7 @@ def logout():
 @login_required #                                <- Added this line.
 def post_receiver_location():
     data = request.get_json()
-    if not data or 'id' not in data or 'x' not in data or 'y' not in data:
+    if not data or 'id' not in data or 'rssi' not in data:
         return jsonify({"error": "Missing fields"}), 400
 
     data['timestamp'] = datetime.utcnow().isoformat()
