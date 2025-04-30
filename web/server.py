@@ -3,6 +3,9 @@ from flask import Flask, request, jsonify, send_from_directory, redirect, url_fo
 from datetime import datetime
 # Added the following imports
 import sqlite3, json
+# For png stuff for past sessions
+import base64
+import os
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from flask_login import (
@@ -29,8 +32,10 @@ initialize_database()
 receiver_data = []
 beacon_data = [
     {"id": "beacon-1", "x": 0, "y": 0},
-    {"id": "beacon-2", "x": 5, "y": 0},
-    {"id": "beacon-3", "x": 0, "y": 5}
+    {"id": "beacon-2", "x": 10, "y": 0},
+    {"id": "beacon-3", "x": 0, "y": 10},
+    {"id": "beacon-4", "x": 10, "y": 10}
+
 ]
 
 #Added the following class, definition and auth routes:
@@ -95,7 +100,7 @@ def logout():
 ##########################################
 
 @app.route('/api/receiver', methods=['POST'])
-@login_required
+@login_required #                                <- Added this line.
 def post_receiver_location():
     data = request.get_json()
     if not data or 'id' not in data or 'x' not in data or 'y' not in data:
@@ -106,23 +111,23 @@ def post_receiver_location():
     return jsonify({"status": "Location received", "data": data}), 200
 
 @app.route('/api/beacon', methods=['GET'])
-@login_required
+@login_required #                                <- Added this line.
 def get_beacons():
     return jsonify(beacon_data), 200
 
 @app.route('/api/receiver', methods=['GET'])
-@login_required
+@login_required #                                <- Added this line.
 def get_receivers():
     return jsonify(receiver_data), 200
 
 
 @app.route('/')
-@login_required
+@login_required #                                <- Added this line.
 def index():
     return send_from_directory('templates', 'index.html') #changed "static" to "templates".
 
 @app.route('/api/config', methods=['POST'])
-@login_required
+@login_required #                                <- Added this line.
 def update_config():
     global beacon_data
     data = request.get_json()
@@ -185,6 +190,58 @@ def start_session():
 
     return jsonify({"sessionID": session_id})
 
+@app.route('/api/end_session', methods=['POST'])
+@login_required
+def end_session():
+    data = request.get_json()
+    session_id = data.get("sessionID")
+
+    if not session_id:
+        return jsonify({"error": "sessionID is required"}), 400
+
+    conn = get_db_connection()
+    conn.execute("""
+        UPDATE Session
+        SET EndTime = ?
+        WHERE SessionID = ? AND EndTime IS NULL
+    """, (datetime.now(), session_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"status": "ended"})
+
+#For session history saving the PNG 
+@app.route('/api/save_room_drawing', methods=['POST'])
+@login_required
+def save_room_drawing():
+    data = request.get_json()
+    session_id = data.get('sessionID')
+    drawing_data = data.get('drawingData')
+
+    if not session_id or not drawing_data:
+        return jsonify({"error": "Missing sessionID or drawingData"}), 400
+
+    header, encoded = drawing_data.split(",", 1)
+    drawing_bytes = base64.b64decode(encoded)
+
+    drawings_dir = "drawings"
+    os.makedirs(drawings_dir, exist_ok=True)
+
+    filepath = os.path.join(drawings_dir, f"drawing_session_{session_id}.png")
+    with open(filepath, "wb") as f:
+        f.write(drawing_bytes)
+
+    return jsonify({"status": "saved", "file": filepath}), 200
+
+@app.route('/drawings/<filename>')
+@login_required
+def get_drawing(filename):
+    return send_from_directory('drawings', filename)
+
+@app.route('/sessions')
+@login_required
+def sessions_page():
+    return render_template('sessions.html')  
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)
-
