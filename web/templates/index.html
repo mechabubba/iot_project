@@ -64,6 +64,7 @@ canvas {
     <a href="/logout">
       <button type="button">Logout</button>
     </a>
+    <button id="send-email-btn" type="button">Send Email</button>
   </div>
   <h1>Indoor Cat Tracker</h1>
 <form id="config-form">
@@ -175,6 +176,42 @@ async function fetchHeatmapData() {
 
     fetchData();
     setInterval(fetchData, 2000);
+
+      // — Send email when button clicked —
+  document.getElementById('send-email-btn')
+    .addEventListener('click', async () => {
+      try {
+        // Dynamic fetch commented out for testing:
+        // const rRes = await fetch('/api/receiver');
+        // const receivers = await rRes.json();
+        // if (receivers.length === 0) {
+        //   alert('No coordinates available');
+        //   return;
+        // }
+        // const last = receivers[receivers.length - 1];
+        // const { x, y } = last;
+
+        // Hardcoded test coordinates:
+        const x = 100;
+        const y = 100;
+
+        // Call the email endpoint
+        const resp = await fetch('/send_email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x, y })
+        });
+        const result = await resp.json();
+        if (resp.ok) {
+          alert(result.message);
+        } else {
+          alert('Error: ' + result.error);
+        }
+      } catch (err) {
+        alert('Network error: ' + err);
+      }
+    });
+
   </script>
 </body>
 </html>

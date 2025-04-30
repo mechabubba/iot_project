@@ -13,6 +13,16 @@ from flask_login import (
 from db_init import get_db_connection, initialize_database
 ##########################################
 import json
+import os
+import smtplib
+from email.message import EmailMessage
+# Email configuration (set these env-vars in your shell or a .env loader)
+EMAIL_HOST = os.environ.get('EMAIL_HOST')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+EMAIL_USE_TLS = True
+
 
 app = Flask(__name__)
 
@@ -130,6 +140,35 @@ def update_config():
     with open("config.json", "w") as f:
         json.dump(data, f, indent=2)
     return jsonify({"status": "updated"})
+
+@app.route('/send_email', methods=['POST'])
+@login_required
+def send_email():
+    data = request.get_json()
+    x = 420 #data.get('x')
+    y = 69 #data.get('y')
+    # grab the currently-logged-in user’s email
+    email_to = current_user.email
+
+    # compose the message
+    msg = EmailMessage()
+    msg['Subject'] = 'Cat Outside Allowed Area'
+    msg['From']    = EMAIL_HOST_USER
+    msg['To']      = email_to
+    msg.set_content(
+        f'Your cat has been found at coordinates [{x}, {y}], which is outside the allowed space.'
+    )
+
+    # send via SMTP
+    try:
+        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
+            if EMAIL_USE_TLS:
+                server.starttls()
+            server.login(EMAIL_HOST_USER, EMAIL_HOST_PASSWORD)
+            server.send_message(msg)
+        return jsonify({"message": "Email sent successfully."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/heatmap')
 def heatmap_data():
