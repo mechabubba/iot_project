@@ -10,11 +10,44 @@ const TX_CHARACTERISTIC_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
 const RX_CHARACTERISTIC_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
 
 if (!process.env.FLASK_SERVER) {
-    console.error("No flask server configured in environment variables! Please create a \`.env\` file and launch again.");
+    console.error("No flask server configured in environment! Exiting...");
     exit(1);
 }
 
+if (!process.env.FLASK_LOGIN_USERNAME || !process.env.FLASK_LOGIN_PASSWORD) {
+    console.error("Missing login information in environment! Exiting...");
+    exit(1);
+}
+
+/**
+ * this setup is kind of ass but its built on top of infrastructure thats already there
+ */
 async function main() {
+    // authenticate with the webserver
+    const authResp = await fetch(`${FLASK_SERVER}/login`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+            username: process.env.FLASK_LOGIN_USERNAME,
+            password: process.env.FLASK_LOGIN_PASSWORD
+        })
+    });
+    if (!authResp.ok) {
+        console.error("Login failed!");
+        console.error(await authResp.text());
+        exit(1);
+    }
+
+    const cookies = authResp.headers.raw()['set-cookie'];
+    const session = (cookies.match(/session=(.*);/) ?? [])[1];
+    if (!session) {
+        console.error('Session cookie not found.');
+        exit(1);
+    }
+
+    // initiate the bluetooth connection
     const { bluetooth, destroy } = createBluetooth();
     const adapter = await bluetooth.defaultAdapter();
     await adapter.startDiscovery();
@@ -32,7 +65,7 @@ async function main() {
  
     // Start RX notifications
     await rxChar.startNotifications();
-    rxChar.on("valuechanged", buffer => {
+    rxChar.on("valuechanged", async buffer => {
         buffer = buffer.toString();
         let json;
         try {
@@ -47,8 +80,12 @@ async function main() {
         if (json.success) {
             switch(json.event) {
                 case "transmission": {
-                    const resp = await fetch(`${process.env.FLASK_SERVER}/api/posts`, {
+                    const resp = await fetch(`${process.env.FLASK_SERVER}/api/receiver`, {
                         method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Cookie": `session=${session}`,
+                        },
                         body: buffer
                     });
                     const data = await resp.json();
@@ -70,4 +107,3 @@ main().then((ret) => {
 }).catch((err) => {
     if (err) console.error(err);
 });
-
