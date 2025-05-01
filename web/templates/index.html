@@ -262,9 +262,13 @@ document.getElementById('end-session').addEventListener('click', async () => {
   });
 
   const result = await res.json();
-  document.getElementById('status').textContent = result.status === "ended"
-    ? `Session ${currentSessionID} ended.`
-    : "Failed to end session.";
+  if (result.status === "ended") {
+    document.getElementById('status').textContent = `Session ${currentSessionID} ended.`;
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // <-- Clear heatmap
+    currentSessionID = null;
+  } else {
+    document.getElementById('status').textContent = "Failed to end session.";
+  }
 });
 
 
@@ -327,7 +331,7 @@ function getHeatColor(count) {
   return 'rgba(0, 0, 255, 0.2)';                       
 }
 
-function drawHeatPoint(x, y) {
+function drawHeatPoint(x, y, intensity) {
   const px = Math.floor(x * scale);
   const py = Math.floor(y * scale);
 
@@ -353,7 +357,7 @@ async function fetchHeatmapData() {
   const frequencyMap = new Map();
 
   for (const [x,y] of points){
-    const key = '${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}';
+    const key = `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
     frequencyMap.set(key, (frequencyMap.get(key) || 0) + 1);
   }
 
