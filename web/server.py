@@ -3,6 +3,9 @@ from flask import Flask, request, jsonify, send_from_directory, redirect, url_fo
 from datetime import datetime
 # Added the following imports
 import sqlite3, json
+# For png stuff for past sessions
+import base64
+import os
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from flask_login import (
@@ -98,7 +101,7 @@ def logout():
 ##########################################
 
 @app.route('/api/receiver', methods=['POST'])
-@login_required
+@login_required #                               
 def post_receiver_location():
     data = request.get_json()
     if len(data) == 0:
@@ -123,23 +126,23 @@ def post_receiver_location():
     return jsonify({"status": "Location received", "data": data}), 200
 
 @app.route('/api/beacon', methods=['GET'])
-@login_required
+@login_required #                               
 def get_beacons():
     return jsonify(beacon_data), 200
 
 @app.route('/api/receiver', methods=['GET'])
-@login_required
+@login_required #                                
 def get_receivers():
     return jsonify(receiver_data), 200
 
 
 @app.route('/')
-@login_required
+@login_required #                                
 def index():
-    return send_from_directory('templates', 'index.html') #changed "static" to "templates".
+    return send_from_directory('templates', 'index.html')
 
 @app.route('/api/config', methods=['POST'])
-@login_required
+@login_required #                                
 def update_config():
     global beacon_data
     data = request.get_json()
@@ -158,7 +161,7 @@ def heatmap_data():
         return jsonify({"error": "sessionID is required"}), 400
 
     conn = get_db_connection()
-    query = 'SELECT X, Y FROM Position WHERE SessionID = ?'
+    query = 'SELECT X, Y, Timestamp FROM Position WHERE SessionID = ?'
     params = [session_id]
 
     if start_time and end_time:
@@ -168,13 +171,13 @@ def heatmap_data():
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
-    return jsonify([[row['X'], row['Y']] for row in rows])
+    return jsonify([[row['X'], row['Y'], row['Timestamp']] for row in rows])
 
 @app.route('/api/sessions')
 def get_sessions():
     conn = get_db_connection()
     rows = conn.execute('''
-        SELECT SessionID, StartTime, EndTime, Description, Width, Height
+        SELECT SessionID, StartTime, EndTime, Description, Width, Height, UserID
         FROM Session
         ORDER BY SessionID DESC
     ''').fetchall()
@@ -190,18 +193,73 @@ def start_session():
 
     if width is None or height is None:
         return jsonify({"error": "Width and Height required"}), 400
+    
+    user_id = current_user.id
 
     conn = get_db_connection()
     cursor = conn.execute("""
-        INSERT INTO Session (StartTime, Description, Width, Height)
-        VALUES (?, ?, ?, ?)
-    """, (datetime.now(), description, width, height))
+        INSERT INTO Session (StartTime, Description, Width, Height, UserID)
+        VALUES (?, ?, ?, ?, ?)
+    """, (datetime.now(), description, width, height, user_id))
     session_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
-    return jsonify({"sessionID": session_id})
+    return jsonify({"sessionID": session_id, "userID": user_id})
+
+@app.route('/api/end_session', methods=['POST'])
+@login_required
+def end_session():
+    data = request.get_json()
+    session_id = data.get("sessionID")
+
+    if not session_id:
+        return jsonify({"error": "sessionID is required"}), 400
+
+    conn = get_db_connection()
+    conn.execute("""
+        UPDATE Session
+        SET EndTime = ?
+        WHERE SessionID = ? AND EndTime IS NULL
+    """, (datetime.now(), session_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"status": "ended"})
+
+#For session history saving the PNG 
+@app.route('/api/save_room_drawing', methods=['POST'])
+@login_required
+def save_room_drawing():
+    data = request.get_json()
+    session_id = data.get('sessionID')
+    drawing_data = data.get('drawingData')
+    user_id = data.get('userID')
+
+    if not session_id or not drawing_data:
+        return jsonify({"error": "Missing sessionID or drawingData"}), 400
+
+    header, encoded = drawing_data.split(",", 1)
+    drawing_bytes = base64.b64decode(encoded)
+
+    drawings_dir = "drawings"
+    os.makedirs(drawings_dir, exist_ok=True)
+
+    filepath = os.path.join(drawings_dir, f"drawing_session_{user_id}_{session_id}.png")
+    with open(filepath, "wb") as f:
+        f.write(drawing_bytes)
+
+    return jsonify({"status": "saved", "file": filepath}), 200
+
+@app.route('/drawings/<filename>')
+@login_required
+def get_drawing(filename):
+    return send_from_directory('drawings', filename)
+
+@app.route('/sessions')
+@login_required
+def sessions_page():
+    return render_template('session.html')  
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)
-
