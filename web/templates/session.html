@@ -78,15 +78,44 @@
         canvas.width = 300;
         canvas.height = 300;
         canvas.id = `canvas-${session.SessionID}`;
-        const slider = document.createElement('input');
-        slider.type = 'range';
-        slider.id = `slider-${session.SessionID}`;
-        div.appendChild(canvas);
-        div.appendChild(slider);
-
         const ctx = canvas.getContext('2d');
         const img = new Image();
         img.src = `/drawings/drawing_session_${session.UserID}_${session.SessionID}.png`;
+        
+        div.appendChild(canvas);
+        const startLabel = document.createElement('label');
+        const endLabel = document.createElement('label');
+        startLabel.textContent = 'Start: ';
+        endLabel.textContent = 'End: ';
+
+        const sliderStart = document.createElement('input');
+        const sliderEnd = document.createElement('input');
+        sliderStart.type = sliderEnd.type = 'range';
+        sliderStart.min = sliderEnd.min = 0;
+
+        sliderStart.style.width = '45%';
+        sliderEnd.style.width = '45%';
+
+        const startTimeSpan = document.createElement('span');
+        const endTimeSpan = document.createElement('span');
+
+        startLabel.innerHTML = '<strong>Start:</strong> ';
+        endLabel.innerHTML = '<strong>End:</strong> ';
+        startLabel.appendChild(startTimeSpan);
+        endLabel.appendChild(endTimeSpan);
+
+        const rangeWrapper = document.createElement('div');
+        rangeWrapper.style.display = 'flex';
+        rangeWrapper.style.flexDirection = 'row';
+        rangeWrapper.style.justifyContent = 'space-between';
+        rangeWrapper.style.alignItems = 'center';
+        rangeWrapper.style.gap = '10px';
+        rangeWrapper.appendChild(startLabel);
+        rangeWrapper.appendChild(sliderStart);
+        rangeWrapper.appendChild(endLabel);
+        rangeWrapper.appendChild(sliderEnd);
+        div.appendChild(rangeWrapper);
+
         await new Promise(resolve => {
           img.onload = () => {
             ctx.drawImage(img, 0, 0, 300, 300);
@@ -96,18 +125,39 @@
 
         const heatRes = await fetch(`/api/heatmap?sessionID=${session.SessionID}`);
         const points = await heatRes.json();
-        slider.max = points.length - 1;
-        slider.value = 0;
 
-        slider.addEventListener('input', () => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, 300, 300);
-          const [x, y] = points[slider.value];
-          ctx.fillStyle = "red";
+        if (points.length < 1) continue;
+
+        sliderStart.max = sliderEnd.max = points.length - 1;
+        sliderStart.value = 0;
+        sliderEnd.value = points.length - 1;
+
+        const redrawTrail = () => {
+        let start = parseInt(sliderStart.value);
+        let end = parseInt(sliderEnd.value);
+        if (start > end) [start, end] = [end, start];
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, 300, 300);
+
+        for (let i = start; i <= end; i++) {
+          const [x, y] = points[i];
+          ctx.fillStyle = "rgba(255, 0, 0, 0.6)";
           ctx.beginPath();
-          ctx.arc(x * 30, y * 30, 5, 0, 2 * Math.PI);
+          ctx.arc(x * 30, y * 30, 4, 0, 2 * Math.PI);
           ctx.fill();
-        });
+          }
+
+          const startTime = points[start][2];
+          const endTime = points[end][2];
+          startTimeSpan.textContent = new Date(startTime).toLocaleString();
+          endTimeSpan.textContent = new Date(endTime).toLocaleString();
+        };
+
+        sliderStart.addEventListener('input', redrawTrail);
+        sliderEnd.addEventListener('input', redrawTrail);
+        redrawTrail();
+
       } else {
         const note = document.createElement('p');
         note.textContent = 'No preview available for active session.';

@@ -146,7 +146,7 @@ def heatmap_data():
         return jsonify({"error": "sessionID is required"}), 400
 
     conn = get_db_connection()
-    query = 'SELECT X, Y FROM Position WHERE SessionID = ?'
+    query = 'SELECT X, Y, Timestamp FROM Position WHERE SessionID = ?'
     params = [session_id]
 
     if start_time and end_time:
@@ -156,7 +156,7 @@ def heatmap_data():
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
-    return jsonify([[row['X'], row['Y']] for row in rows])
+    return jsonify([[row['X'], row['Y'], row['Timestamp']] for row in rows])
 
 @app.route('/api/sessions')
 def get_sessions():
