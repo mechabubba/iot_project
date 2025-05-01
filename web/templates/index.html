@@ -298,10 +298,28 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
 
 });
 
+function getHeatColor(count) {
+  if (count > 15) return 'rgba(255, 0, 0, 0.6)';      
+  if (count > 10) return 'rgba(255, 165, 0, 0.5)';    
+  if (count > 5)  return 'rgba(255, 255, 0, 0.4)';    
+  if (count > 2)  return 'rgba(0, 255, 0, 0.3)';        
+  return 'rgba(0, 0, 255, 0.2)';                       
+}
+
 function drawHeatPoint(x, y) {
-  ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+  const px = Math.floor(x * scale);
+  const py = Math.floor(y * scale);
+
+  for (let i = 0; i < intensity; i++ ){
+    ctx.beginPath();
+    ctx.fillStyle = `rgba(255, 0, 0, 0.04)`;
+    ctx.arc(px, py, 30, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+  const color = getHeatColor(intensity);
   ctx.beginPath();
-  ctx.arc(x * scale, y * scale, 10, 0, 2 * Math.PI);
+  ctx.fillStyle = color;
+  ctx.arc(px, py, 10, 0, 2 * Math.PI);
   ctx.fill();
 }
 
@@ -311,9 +329,16 @@ async function fetchHeatmapData() {
   const res = await fetch(`/api/heatmap?sessionID=${currentSessionID}`);
   const points = await res.json();
 
+  const frequencyMap = new Map();
 
-  for (const [x, y] of points) {
-    drawHeatPoint(x, y);
+  for (const [x,y] of points){
+    const key = '${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}';
+    frequencyMap.set(key, (frequencyMap.get(key) || 0) + 1);
+  }
+
+  for (const [key, count] of frequencyMap.entries()) {
+    const [x, y] = key.split(',').map(Number);
+    drawHeatPoint(x, y, count);
   }
 }
 
