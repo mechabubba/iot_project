@@ -323,14 +323,6 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
 
 });
 
-function getHeatColor(count) {
-  if (count > 15) return 'rgba(255, 0, 0, 0.6)';      
-  if (count > 10) return 'rgba(255, 165, 0, 0.5)';    
-  if (count > 5)  return 'rgba(255, 255, 0, 0.4)';    
-  if (count > 2)  return 'rgba(0, 255, 0, 0.3)';        
-  return 'rgba(0, 0, 255, 0.2)';                       
-}
-
 function drawHeatPoint(x, y, intensity) {
   const px = Math.floor(x * scale);
   const py = Math.floor(y * scale);
@@ -341,11 +333,6 @@ function drawHeatPoint(x, y, intensity) {
     ctx.arc(px, py, 30, 0, 2 * Math.PI);
     ctx.fill();
   }
-  const color = getHeatColor(intensity);
-  ctx.beginPath();
-  ctx.fillStyle = color;
-  ctx.arc(px, py, 10, 0, 2 * Math.PI);
-  ctx.fill();
 }
 
 async function fetchHeatmapData() {
