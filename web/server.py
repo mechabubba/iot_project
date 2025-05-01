@@ -100,7 +100,7 @@ def logout():
 ##########################################
 
 @app.route('/api/receiver', methods=['POST'])
-@login_required #                                <- Added this line.
+@login_required #                               
 def post_receiver_location():
     data = request.get_json()
     if not data or 'id' not in data or 'rssi' not in data:
@@ -111,12 +111,12 @@ def post_receiver_location():
     return jsonify({"status": "Location received", "data": data}), 200
 
 @app.route('/api/beacon', methods=['GET'])
-@login_required #                                <- Added this line.
+@login_required #                               
 def get_beacons():
     return jsonify(beacon_data), 200
 
 @app.route('/api/receiver', methods=['GET'])
-@login_required #                                <- Added this line.
+@login_required #                                
 def get_receivers():
     return jsonify(receiver_data), 200
 
@@ -241,7 +241,7 @@ def get_drawing(filename):
 @app.route('/sessions')
 @login_required
 def sessions_page():
-    return render_template('sessions.html')  
+    return render_template('session.html')  
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)

@@ -3,10 +3,12 @@ from datetime import datetime, timedelta
 import random
 from werkzeug.security import generate_password_hash, check_password_hash #Added
 
-DB_PATH = 'cat_tracker.db' #Added
+sqlite3.register_adapter(datetime, lambda dt: dt.isoformat())
+
+sqlite3.register_converter("timestamp", lambda s: datetime.fromisoformat(s.decode()))
 
 def get_db_connection():
-    conn = conn = sqlite3.connect('cat_tracker.db')
+    conn = conn = sqlite3.connect('cat_tracker.db', detect_types=sqlite3.PARSE_DECLTYPES)
     conn.execute('PRAGMA foreign_keys = ON;')
     conn.row_factory = sqlite3.Row
     return conn
@@ -30,8 +32,8 @@ def create_session_table():
     conn.execute("""
         CREATE TABLE IF NOT EXISTS Session (
         SessionID INTEGER PRIMARY KEY AUTOINCREMENT,
-        StartTime DATETIME NOT NULL,
-        EndTime DATETIME,
+        StartTime timestamp NOT NULL,
+        EndTime timestamp,
         Description TEXT,
         Width REAL NOT NULL,
         Height REAL NOT NULL
@@ -45,7 +47,7 @@ def create_position_table():
         CREATE TABLE IF NOT EXISTS Position (
         PositionID INTEGER PRIMARY KEY AUTOINCREMENT,
         SessionID INTEGER NOT NULL,
-        Timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        Timestamp timestamp DEFAULT CURRENT_TIMESTAMP,
         X REAL NOT NULL,
         Y REAL NOT NULL,
         FOREIGN KEY (SessionID) REFERENCES Session(SessionID)
