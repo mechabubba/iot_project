@@ -62,6 +62,9 @@ async function main() {
     const txChar = await uartService.getCharacteristic(TX_CHARACTERISTIC_UUID.toLowerCase());
     const rxChar = await uartService.getCharacteristic(RX_CHARACTERISTIC_UUID.toLowerCase());
  
+    // transmission array, see implementation below this valuechanged callback
+    const transmissions = [];
+
     // Start RX notifications
     await rxChar.startNotifications();
     rxChar.on("valuechanged", async buffer => {
@@ -79,20 +82,7 @@ async function main() {
         if (json.success) {
             switch(json.event) {
                 case "transmission": {
-                    try {
-                        await fetch(`${process.env.FLASK_SERVER}/api/receiver`, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                "Cookie": `session=${session};`,
-                            },
-                            body: JSON.stringify(json.data)
-                        });
-                    } catch(e) {
-                        console.error("Error POSTing to flask (ignoring);");
-                        console.error(e);
-                    }
-
+                    transmissions.push(json.data);
                     break;
                 }
                 default: {
@@ -105,6 +95,33 @@ async function main() {
             return;
         }
     });
+
+    // batch transmission requests.
+    // this is due to the fact that i want to create the coordinates on the fly, *at* the endpoint.
+    // cant do this *per response*, as they need to come in together so we know how close the receiver is at each endpoint, at that moment.
+    // so, check every second or so how we're doin. if empty (or only one response), don't bother.
+    setInterval(async () => {
+        if ([0, 1].includes(transmissions.length)) {
+            return;
+        }
+        console.log(transmissions);
+
+        try {
+            await fetch(`${process.env.FLASK_SERVER}/api/receiver`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Cookie": `session=${session};`,
+                },
+                body: JSON.stringify(transmissions)
+            });
+        } catch(e) {
+            console.error("Error POSTing to flask (ignoring);");
+            console.error(e);
+        }
+
+        transmissions.length = 0; // this clears the thing apparently
+    }, 1000);
 }
  
 main().then((ret) => {
