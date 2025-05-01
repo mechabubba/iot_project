@@ -123,6 +123,28 @@ def post_receiver_location():
     loc['y'] = coords[1].item()
     loc['timestamp'] = datetime.utcnow().isoformat()
     receiver_data.append(loc)
+
+    conn = get_db_connection()
+    # Get the most recent active session for the user
+    session_row = conn.execute("""
+        SELECT SessionID FROM Session 
+        WHERE UserID = ? AND EndTime IS NULL 
+        ORDER BY StartTime DESC 
+        LIMIT 1
+    """, (current_user.id,)).fetchone()
+
+    if not session_row:
+        conn.close()
+        return jsonify({"error": "No active session found for user"}), 400
+
+    session_id = session_row['SessionID']
+    conn.execute("""
+        INSERT INTO Position (SessionID, Timestamp, X, Y)
+        VALUES (?, ?, ?, ?)
+    """, (session_id, loc['timestamp'], loc['x'], loc['y']))
+    conn.commit()
+    conn.close()
+    
     return jsonify({"status": "Location received", "data": data}), 200
 
 @app.route('/api/beacon', methods=['GET'])
