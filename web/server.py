@@ -122,12 +122,12 @@ def get_receivers():
 
 
 @app.route('/')
-@login_required #                                <- Added this line.
+@login_required #                                
 def index():
-    return send_from_directory('templates', 'index.html') #changed "static" to "templates".
+    return send_from_directory('templates', 'index.html')
 
 @app.route('/api/config', methods=['POST'])
-@login_required #                                <- Added this line.
+@login_required #                                
 def update_config():
     global beacon_data
     data = request.get_json()
@@ -162,7 +162,7 @@ def heatmap_data():
 def get_sessions():
     conn = get_db_connection()
     rows = conn.execute('''
-        SELECT SessionID, StartTime, EndTime, Description, Width, Height
+        SELECT SessionID, StartTime, EndTime, Description, Width, Height, UserID
         FROM Session
         ORDER BY SessionID DESC
     ''').fetchall()
@@ -178,17 +178,19 @@ def start_session():
 
     if width is None or height is None:
         return jsonify({"error": "Width and Height required"}), 400
+    
+    user_id = current_user.id
 
     conn = get_db_connection()
     cursor = conn.execute("""
-        INSERT INTO Session (StartTime, Description, Width, Height)
-        VALUES (?, ?, ?, ?)
-    """, (datetime.now(), description, width, height))
+        INSERT INTO Session (StartTime, Description, Width, Height, UserID)
+        VALUES (?, ?, ?, ?, ?)
+    """, (datetime.now(), description, width, height, user_id))
     session_id = cursor.lastrowid
     conn.commit()
     conn.close()
 
-    return jsonify({"sessionID": session_id})
+    return jsonify({"sessionID": session_id, "userID": user_id})
 
 @app.route('/api/end_session', methods=['POST'])
 @login_required
@@ -217,6 +219,7 @@ def save_room_drawing():
     data = request.get_json()
     session_id = data.get('sessionID')
     drawing_data = data.get('drawingData')
+    user_id = data.get('userID')
 
     if not session_id or not drawing_data:
         return jsonify({"error": "Missing sessionID or drawingData"}), 400
@@ -227,7 +230,7 @@ def save_room_drawing():
     drawings_dir = "drawings"
     os.makedirs(drawings_dir, exist_ok=True)
 
-    filepath = os.path.join(drawings_dir, f"drawing_session_{session_id}.png")
+    filepath = os.path.join(drawings_dir, f"drawing_session_{user_id}_{session_id}.png")
     with open(filepath, "wb") as f:
         f.write(drawing_bytes)
 

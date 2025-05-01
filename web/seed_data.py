@@ -24,9 +24,9 @@ def seed_data():
     description = "Seeded test session"
 
     cursor.execute("""
-        INSERT INTO Session (StartTime, EndTime, Description, Width, Height)
-        VALUES (?, ?, ?, ?, ?)
-    """, (start_time, end_time, description, width, height))
+        INSERT INTO Session (StartTime, EndTime, Description, Width, Height, UserID)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (start_time, end_time, description, width, height, 1))
 
     session_id = cursor.lastrowid
 

@@ -36,7 +36,9 @@ def create_session_table():
         EndTime timestamp,
         Description TEXT,
         Width REAL NOT NULL,
-        Height REAL NOT NULL
+        Height REAL NOT NULL,
+        UserID INTEGER NOT NULL,
+        FOREIGN KEY (UserID) REFERENCES Users(id)
         );""")
     conn.close()
 

@@ -148,6 +148,7 @@
     let drawing = false;
     let drawingMode = false;
     let currentSessionID = null;
+    let currentUserID = null;
 
     startSessionBtn.addEventListener('click', async () => {
       const width = parseFloat(document.getElementById('room-width').value);
@@ -161,6 +162,7 @@
 
       const data = await res.json();
       currentSessionID = data.sessionID;
+      currentUserID = data.userID;
       document.getElementById('status').textContent = `Started session: ${currentSessionID}`;
     });
    
@@ -239,7 +241,8 @@
         },
         body: JSON.stringify({
           sessionID: currentSessionID,
-          drawingData: dataURL
+          drawingData: dataURL,
+          userID: currentUserID,
         })
       });
 
