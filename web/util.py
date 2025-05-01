@@ -15,9 +15,6 @@ def estimateDistance(rssi: int):
   else:
     return 0.89976 * pow(ratio, 7.7095) + 0.111;
 
-def getDistance(x1, x2, y1, y2):
-  return math.sqrt(math.pow(x2 - x1, 2) + math.pow(y2 - y1, 2))
-
 def estimateCoordinates(bs, ds):
   """
   estimates the coordinates of the reciever based on given beacon locations and measured distances.
@@ -47,15 +44,3 @@ def estimateCoordinates(bs, ds):
 
   result = least_squares(eqns, [x0, y0])
   return tuple(result.x)
-
-# test data
-beacons = [
-  { "x": 2, "y": 1 },
-  { "x": 9, "y": 4 },
-  { "x": 6, "y": 8 }
-]
-distances = [
-  4.242640687, 4, 4.123105626
-]
-
-print(estimateCoordinates(beacons, distances))

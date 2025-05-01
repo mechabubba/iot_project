@@ -14,6 +14,8 @@ from db_init import get_db_connection, initialize_database
 ##########################################
 import json
 
+from util import estimateDistance, estimateCoordinates
+
 app = Flask(__name__)
 
 # — Session & Login config —
@@ -28,9 +30,10 @@ initialize_database()
 
 receiver_data = []
 beacon_data = [
-    {"id": "beacon-1", "x": 0, "y": 0},
-    {"id": "beacon-2", "x": 5, "y": 0},
-    {"id": "beacon-3", "x": 0, "y": 5}
+    {"id": 0xA57A, "x": 0, "y": 0}, # green
+    {"id": 0x9182, "x": 5, "y": 0}, # yellow
+    {"id": 0x740A, "x": 0, "y": 5}, # red
+    {"id": 0x93BE, "x": 5, "y": 5}  # blue
 ]
 
 #Added the following class, definition and auth routes:
@@ -98,11 +101,25 @@ def logout():
 @login_required
 def post_receiver_location():
     data = request.get_json()
-    if not data or 'id' not in data or 'rssi' not in data:
-        return jsonify({"error": "Missing fields"}), 400
+    if len(data) == 0:
+        return jsonify({"error": f"Empty payload"}), 400
+ 
+    for i in range(len(data)):
+        if not data[i] or 'id' not in data[i] or 'rssi' not in data[i]:
+            return jsonify({"error": f"Missing field in object {i}"}), 400
 
-    data['timestamp'] = datetime.utcnow().isoformat()
-    receiver_data.append(data)
+    # copy beacons list. filter them based on resulting values in receiver response.
+    response_ids = {entry['id'] for entry in data}
+    seen_beacons = [beacon for beacon in beacon_data if beacon['id'] in response_ids]
+
+    dists = [estimateDistance(obj["rssi"]) for obj in data]
+    coords = estimateCoordinates(seen_beacons, dists)
+
+    loc = {}
+    loc['x'] = coords[0].item()
+    loc['y'] = coords[1].item()
+    loc['timestamp'] = datetime.utcnow().isoformat()
+    receiver_data.append(loc)
     return jsonify({"status": "Location received", "data": data}), 200
 
 @app.route('/api/beacon', methods=['GET'])
