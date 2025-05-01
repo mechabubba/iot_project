@@ -31,6 +31,7 @@ login_manager.init_app(app)
 # Initialize your new Users table on startup
 initialize_database()
 
+# initial data points
 receiver_data = []
 beacon_data = {
     0x740A: { # red
@@ -53,7 +54,23 @@ beacon_data = {
         "x": 5,
         "y": 5
     }
-};
+}
+room_data = {
+    "height": 10,
+    "width": 10
+}
+
+# fill in data points from config.json (if applicable)
+try:
+    with open('config.json') as f:
+        data = json.load(f)
+        if "beacons" in data:
+            beacon_data = data["beacons"]
+        if "room" in data:
+            room_data = data["room"]
+        f.close()
+except FileNotFoundError:
+    pass # shrug
 
 #Added the following class, definition and auth routes:
 class User(UserMixin):
