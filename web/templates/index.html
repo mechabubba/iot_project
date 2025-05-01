@@ -101,10 +101,10 @@
   <label>Room Height: <input type="number" id="room-height" value="10" /></label><br />
   <h4>Beacon Positions</h4>
   <div id="beacons-input">
-    <label>Beacon 1: X <input type="number" id="b1x" value="0" /> Y <input type="number" id="b1y" value="0" /></label><br />
-    <label>Beacon 2: X <input type="number" id="b2x" value="10" /> Y <input type="number" id="b2y" value="0" /></label><br />
-    <label>Beacon 3: X <input type="number" id="b3x" value="0" /> Y <input type="number" id="b3y" value="10" /></label><br />
-    <label>Beacon 4: X <input type="number" id="b4x" value="10" /> Y <input type="number" id="b4y" value="10" /></label><br />
+    <label>Red: X <input type="number" step="0.01" id="b1x" value="0" /> Y <input type="number" step="0.01" id="b1y" value="0" /></label><br />
+    <label>Yellow: X <input type="number" step="0.01" id="b2x" value="10" /> Y <input type="number" step="0.01" id="b2y" value="0" /></label><br />
+    <label>Green: X <input type="number" step="0.01" id="b3x" value="0" /> Y <input type="number" step="0.01" id="b3y" value="10" /></label><br />
+    <label>Blue: X <input type="number" step="0.01" id="b4x" value="10" /> Y <input type="number" step="0.01" id="b4y" value="10" /></label><br />
   </div>
   <button type="submit">Update Map</button>
 
@@ -271,15 +271,36 @@ document.getElementById('end-session').addEventListener('click', async () => {
 document.getElementById('config-form').addEventListener('submit', async (e) => {
   e.preventDefault();
 
-
-
-  const beacons = [
-    { id: "beacon-1", x: parseFloat(document.getElementById('b1x').value), y: parseFloat(document.getElementById('b1y').value) },
-    { id: "beacon-2", x: parseFloat(document.getElementById('b2x').value), y: parseFloat(document.getElementById('b2y').value) },
-    { id: "beacon-3", x: parseFloat(document.getElementById('b3x').value), y: parseFloat(document.getElementById('b3y').value) },
-    { id: "beacon-4", x: parseFloat(document.getElementById('b4x').value), y: parseFloat(document.getElementById('b4y').value) }
-  ];
-
+  const beacons = {
+    0x740A: {
+      id: 0x740A,
+      text: "Red",
+      color: "red",
+      x: parseFloat(document.getElementById('b1x').value),
+      y: parseFloat(document.getElementById('b1y').value),
+    },
+    0x9182: {
+      id: 0x9182,
+      text: "Yellow",
+      color: "yellow",
+      x: parseFloat(document.getElementById('b2x').value),
+      y: parseFloat(document.getElementById('b2y').value)
+    },
+    0xA57A: {
+      id: 0xA57A,
+      text: "Green",
+      color: "green",
+      x: parseFloat(document.getElementById('b3x').value),
+      y: parseFloat(document.getElementById('b3y').value)
+    },
+    0x93BE: {
+      id: 0x93BE,
+      text: "Blue",
+      color: "blue",
+      x: parseFloat(document.getElementById('b4x').value),
+      y: parseFloat(document.getElementById('b4y').value)
+    }
+  };
 
   const room = {
     width: parseInt(document.getElementById('room-width').value),
@@ -360,10 +381,9 @@ function drawPoint(x, y, color, label) {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        beacons.forEach(b => {
-        const color = beaconColors[b.id] || "blue";
-        drawPoint(b.x, b.y, color, b.id);
-        });
+        for (const [key, value] of Object.entries(beacons)) {
+          drawPoint(value.x, value.y, value.color ?? "blue", value.id);
+        }
 
         const latest = receivers.at(-1);
         if (latest) {

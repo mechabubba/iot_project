@@ -32,12 +32,28 @@ login_manager.init_app(app)
 initialize_database()
 
 receiver_data = []
-beacon_data = [
-    {"id": 0xA57A, "x": 0, "y": 0}, # green
-    {"id": 0x9182, "x": 5, "y": 0}, # yellow
-    {"id": 0x740A, "x": 0, "y": 5}, # red
-    {"id": 0x93BE, "x": 5, "y": 5}  # blue
-]
+beacon_data = {
+    0x740A: { # red
+        "id": 0x740A,
+        "x": 0,
+        "y": 0,
+    },
+    0x9182: { # yellow
+        "id": 0x9182,
+        "x": 0,
+        "y": 5,
+    },
+    0xA57A: { # green
+        "id": 0xA57A,
+        "x": 5,
+        "y": 0,
+    },
+    0x93BE: { # blue
+        "id": 0x93BE,
+        "x": 5,
+        "y": 5
+    }
+};
 
 #Added the following class, definition and auth routes:
 class User(UserMixin):
@@ -113,7 +129,8 @@ def post_receiver_location():
 
     # copy beacons list. filter them based on resulting values in receiver response.
     response_ids = {entry['id'] for entry in data}
-    seen_beacons = [beacon for beacon in beacon_data if beacon['id'] in response_ids]
+
+    seen_beacons = [beacon for _, beacon in beacon_data.items() if beacon["id"] in response_ids]
 
     dists = [estimateDistance(obj["rssi"]) for obj in data]
     coords = estimateCoordinates(seen_beacons, dists)
