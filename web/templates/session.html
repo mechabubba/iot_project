@@ -54,6 +54,17 @@
   <div id="session-list"></div>
 
 <script>
+    function drawHeatPoint(ctx, x, y, intensity) {
+      const px = Math.floor(x * 30);
+      const py = Math.floor(y * 30);
+
+      for (let i = 0; i < intensity; i++) {
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255, 0, 0, 0.04)`; // soft red glow
+        ctx.arc(px, py, 30, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
   async function fetchSessions() {
     const res = await fetch('/api/sessions');
     const sessions = await res.json();
@@ -132,21 +143,25 @@
         sliderStart.value = 0;
         sliderEnd.value = points.length - 1;
 
-        const redrawTrail = () => {
-        let start = parseInt(sliderStart.value);
-        let end = parseInt(sliderEnd.value);
-        if (start > end) [start, end] = [end, start];
+        const redrawHeatmap = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, 300, 300);
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, 300, 300);
+            let start = parseInt(sliderStart.value);
+            let end = parseInt(sliderEnd.value);
+            if (start > end) [start, end] = [end, start];
 
-        for (let i = start; i <= end; i++) {
-          const [x, y] = points[i];
-          ctx.fillStyle = "rgba(255, 0, 0, 0.6)";
-          ctx.beginPath();
-          ctx.arc(x * 30, y * 30, 4, 0, 2 * Math.PI);
-          ctx.fill();
-          }
+            const frequencyMap = new Map();
+            for (let i = start; i <= end; i++) {
+              const [x, y] = points[i];
+              const key = `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
+              frequencyMap.set(key, (frequencyMap.get(key) || 0) + 1);
+            }
+
+            for (const [key, count] of frequencyMap.entries()) {
+              const [x, y] = key.split(',').map(Number);
+              drawHeatPoint(ctx, x, y, count);
+            }
 
           const startTime = points[start][2];
           const endTime = points[end][2];
@@ -154,9 +169,9 @@
           endTimeSpan.textContent = new Date(endTime).toLocaleString();
         };
 
-        sliderStart.addEventListener('input', redrawTrail);
-        sliderEnd.addEventListener('input', redrawTrail);
-        redrawTrail();
+        sliderStart.addEventListener('input', redrawHeatmap);
+        sliderEnd.addEventListener('input', redrawHeatmap);
+        redrawHeatmap();
 
       } else {
         const note = document.createElement('p');
