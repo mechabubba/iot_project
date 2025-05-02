@@ -401,12 +401,11 @@ function drawPoint(x, y, color, label) {
           drawPoint(value.x, value.y, value.color ?? "blue", value.id);
         }
 
+        await fetchHeatmapData();
         const latest = receivers.at(-1);
         if (latest) {
           drawPoint(latest.x, latest.y, "orange", "Cat");
         }
-        await fetchHeatmapData();
-
       } catch (err) {
         console.error("Fetch error:", err);
       }
