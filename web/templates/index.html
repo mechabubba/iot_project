@@ -402,6 +402,7 @@ function drawPoint(x, y, color, label) {
         }
 
         await fetchHeatmapData();
+        await fetchHeatmapData();
         const latest = receivers.at(-1);
         if (latest) {
           drawPoint(latest.x, latest.y, "orange", "Cat");
