@@ -6,6 +6,10 @@ import sqlite3, json
 # For png stuff for past sessions
 import base64
 import os
+import math
+import smtplib
+from email.message import EmailMessage
+
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from flask_login import (
@@ -59,6 +63,20 @@ room_data = {
     "height": 10,
     "width": 10
 }
+
+email_do = True    # changed if we're missing something
+email_sent = False # variable to send email on high
+
+# Email configuration (set these env-vars in your shell or a .env loader)
+EMAIL_HOST = os.environ.get('EMAIL_HOST')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+EMAIL_USE_TLS = True
+
+if not EMAIL_HOST or not EMAIL_PORT or not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD:
+    # missing some config, silently die
+    email_do = False
 
 # fill in data points from config.json (if applicable)
 try:
@@ -146,7 +164,6 @@ def post_receiver_location():
 
     # copy beacons list. filter them based on resulting values in receiver response.
     response_ids = {entry['id'] for entry in data}
-
     seen_beacons = [beacon for _, beacon in beacon_data.items() if beacon["id"] in response_ids]
 
     dists = [estimateDistance(obj["rssi"]) for obj in data]
@@ -157,6 +174,15 @@ def post_receiver_location():
     loc['y'] = coords[1].item()
     loc['timestamp'] = datetime.utcnow().isoformat()
     receiver_data.append(loc)
+
+    # email stuff
+    if is_inside_beacons(beacon_data, (loc['x'], loc['y'])):
+        if not email_sent:
+            email_sent = True
+
+    else:
+        if email_sent:
+            email_sent = False
 
     conn = get_db_connection()
     # Get the most recent active session for the user
@@ -316,6 +342,85 @@ def get_drawing(filename):
 @login_required
 def sessions_page():
     return render_template('session.html')  
+
+"""
+send a relevant email about a given point
+code from elijah https://github.com/mechabubba/iot_project/commit/13b0305c47c606975560344b7fa3f87d16d7c59e
+"""
+def send_email(point):
+    if not email_do:
+        return
+
+    x = point[0] #data.get('x')
+    y = point[1] #data.get('y')
+    # grab the currently-logged-in user’s email
+    email_to = current_user.email
+
+    # compose the message
+    msg = EmailMessage()
+    msg['Subject'] = 'Cat Outside Allowed Area'
+    msg['From']    = EMAIL_HOST_USER
+    msg['To']      = email_to
+    msg.set_content(
+        f'Your cat has been found at coordinates [{x}, {y}], which is outside the allowed space.'
+    )
+
+    # send via SMTP
+    try:
+        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
+            if EMAIL_USE_TLS:
+                server.starttls()
+            server.login(EMAIL_HOST_USER, EMAIL_HOST_PASSWORD)
+            server.send_message(msg)
+        return jsonify({"message": "Email sent successfully."}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+"""
+determines if given is inside the beacons.
+to do this;
+- make a polygon.
+  - sort each polygon point by its angle relative to the center so theres no crossover action.
+- cast a ray 
+note that this method only supports beacon structures with 4 beacons. 
+
+for the reader: this is ai assisted code
+"""
+def is_inside_beacons(beacon_data, point):
+    # create thine polygon
+    polygon = [(data["x"], data["y"]) for data in beacon_data.values()]
+    if len(polygon) != 4:
+        # could throw here but this is easier
+        return False
+
+    # sort our vertices clockwise
+    center_x = sum(p[0] for p in polygon) / len(polygon)
+    center_y = sum(p[1] for p in polygon) / len(polygon)
+    polygon = sorted(polygon, key=lambda p: (math.atan2(p[1] - center_y, p[0] - center_x)))
+
+    # donald in mathemagic land
+    num = len(polygon)
+    j = num - 1
+    inside = False
+    for i in range(num):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+
+        # check if we're crossing an edge.
+        # in order;
+        # - test if we're within the y boundaries of the two beacon points (abandon ship this iteration if not)
+        # - test if a horizontal ray from the given point intersects with the line between the two beacon points
+        #
+        # this is tested via a 0deg facing ray of infinite length for some convention reasons, but the gist is that if
+        # it crosses a beacon line an odd number of times, we know we're in the polygon. 
+        if ((yi > point[1]) != (yj > point[1])) and \
+           (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi + 1e-12) + xi):
+            # i am told my chatgpt this ie-12 value is a "tiny fudge factor" that stops us from dividing by zero
+            # in cases where our two polygon points are on the same y
+            inside = not inside
+        j = i
+    
+    return inside
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)
